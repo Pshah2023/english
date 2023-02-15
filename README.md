@@ -6,9 +6,10 @@
 
 # Hopefully in the Future
 
-1. Draw homework in from multiple sources.
-2. Figure out tools related to certain tasks and open them up automatically.
-3. Activity monitor analysis and ways of increasing value of a day.
-4. Doing tests weekly that can automatically parse everything. 
-5. Mangaing everything here on the phone or any other website so that I don't lose everything if I lose my computer or wifi.
-6. Automatic homework complete for simple tasks.
+1. Fixing Chinese
+2. Draw homework in from multiple sources.
+   1. Pyppeteer integration would be pretty cool.
+3. Automate scheduling into actual events and open up related-tools, websites, etc automatically.
+4. Activity monitor analysis with a comparison to yesterday at the exact same time.
+5. A personal AI that can complete simple tasks would be pretty sweet.
+6. Mangaing everything without wifi and being device independent would be required later on.

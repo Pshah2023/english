@@ -6,10 +6,11 @@ import nltk
 from datetime import datetime
 import sys
 from nltk.tokenize.treebank import TreebankWordDetokenizer
+from nltk.tokenize.stanford_segmenter import StanfordSegmenter
 import glob
 import os
 import importing
-# from Code.old.old import Old
+from langdetect import detect
 
 
 class LearnEnglish:
@@ -19,57 +20,51 @@ class LearnEnglish:
     def __init__(self, x, number=0):
         inp = x.clipboard()
         if len(inp) < 500:
-            inp = x.docs()
-        inp = re.sub("\n\n", " ¶ ", inp)
-        inp = re.sub(" ¶ ", "¶ ¶", inp)
-        inp = re.sub(r"\n", " ", inp)
-        inp = re.sub(r"\s\s+", " ", inp)
-        self.token_text = nltk.tokenize.sent_tokenize(inp)
-        self.itr = iter(enumerate(self.token_text))
-        text = "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
+            inp = x.write(path="docs")
+        language = detect(inp)
+        if language == "en":
+            inp = re.sub("", ". ", inp)
+            inp = re.sub("\n\n", " ¶ ", inp)
+            inp = re.sub(" ¶ ", "¶ ¶", inp)
+            inp = re.sub(r"\n", " ", inp)
+            inp = re.sub(r"\s\s+", " ", inp)
+            self.token_text = nltk.tokenize.sent_tokenize(inp)
+            self.itr = iter(enumerate(self.token_text))
+        if language == "zh-cn":
+            inp = StanfordSegmenter()
+            
+        text = []
         comprehension = [self.highlights]
-        # practice = [Old.quickWords, Old.emotions, Old.sentenceStructure, Old.punctuation,
-        #             Old.fillingIn, Old.endToBeginning, Old.paragraphStructure, Old.wordByWord, Old.beginningWords]
         for num, s in self.itr:
-            text += [random.choice(comprehension), comprehension[number-1]
+            text = text + [random.choice(comprehension), comprehension[number-1]
                      ][number != 0](s, num)
-        x.write(text)
-        x.json(self.token_text)
+        x.toml(text, path="learning")
+        x.toml(self.token_text, path="data")
 
     def highlights(self, s, num, out=""):
         """Guess the important words and classify them
-        The format is storage, category, and emotion."""
-        out += "\n" + "\n+ " + str(num) + " highlights " + \
-            "P's, D's, C's, or E's: "
-        out += "\n" + s
-        out += "\nHighlights: "
-        out += "\n" + "\n[]() + C: "
-        out += "\n"
-        return out
-
+        The format is storage, category, and emotion. Previously.
+        Not it is Positives, Differences, Cues, and Efficiency."""
+        out = [str(num) + " highlights: "]
+        out.append(s)
+        out.append("")
+        return [out]
 
 class ImproveEnglish:
 
-    def __init__(self, x, levels=3):
+    def __init__(self, x, levels=4):
         if levels > 0:
             self.highlights(x)
         if levels > 1:
             self.numericAnalysis(x)
         if levels > 2:
             self.processAnalysis(x)
+        if levels > 3:
+            self.numericProcessAnalysis(x)
 
-    def findall(self, startString, endString, fullstring):
-        allInstances = []
-        startPosition = fullstring.find(startString)
-        endPosition = fullstring.find(endString)
-        while startPosition != -1:
-            allInstances.append((startPosition+len(startString), endPosition))
-            startPosition = fullstring.find(startString, startPosition+1)
-            endPosition = fullstring.find(endString, endPosition+1)
-        return allInstances
 
     def highlights(self, x):
-        listOfWords = x.yaml()
+        listOfWords = x.toml(path="highlights")
         listOfWords = [item for item in listOfWords if isinstance(item, str)]
         inp = x.write()
         for startPoint, endPoint in self.findall("\nHighlights: ", "\n[]() + C:", inp):
@@ -78,10 +73,10 @@ class ImproveEnglish:
                 word = word.strip()
                 if word != "" and word not in listOfWords:
                     listOfWords.append(word)
-        x.yaml(listOfWords)
+        x.toml(listOfWords, path="highlights")
 
     def numericAnalysis(self, x):
-        listOfWords = x.yaml()
+        listOfWords = x.toml(path="highlights")
         listOfWords = [item for item in listOfWords if isinstance(item, str)]
         organizedList = [[], [], []]
         for each in listOfWords:
@@ -93,10 +88,10 @@ class ImproveEnglish:
                 if "2" in each:
                     organizedList[2].append(each)
         organizedList = [li for li in organizedList if len(li) != 0]
-        x.yaml(listOfWords + organizedList)
+        listOfWords = x.toml(listOfWords + organizedList, path="highlights")
 
     def processAnalysis(self, x):
-        listOfWords = x.yaml()
+        listOfWords = x.toml(path="highlights")
         wordsOnly = [item for item in listOfWords if isinstance(item, str)]
         wordDictionary = dict()
         for num, word in enumerate(wordsOnly):
@@ -105,7 +100,38 @@ class ImproveEnglish:
             except IndexError:
                 pass
         listOfWords.append(wordDictionary)
-        x.yaml(listOfWords)
+        x.toml(listOfWords, path="highlights")
+    
+    def numericProcessAnalysis(self, x):
+        listOfWords = x.toml(path="highlights")
+        wordsOnly = [item.strip() for item in listOfWords if isinstance(item, str)]
+        wordDictionary = dict()
+        for num, word in enumerate(wordsOnly):
+            try:
+                wordDictionary[word] = wordsOnly[num+1]
+            except IndexError:
+                pass
+        wordDictionaryList = [dict(), dict(), dict(), dict(), dict(), dict(), dict()]
+        for key, value in wordDictionary.items():
+            
+            try:
+                if int(key[-1]) + int(value[-1]) == 4:
+                    number = 6
+                elif int(key[-1]) + int(value[-1]) == 3:
+                    number == 5
+                elif int(key[-1]) + int(value[-1]) == 2:
+                    number == 3
+                elif int(key[-1]) + int(value[-1]) == 1:
+                    number == 1
+                elif int(key[-1]) + int(value[-1]) == 0:
+                    number == 0
+                if int(key[-1]) < int(value[-1]):
+                    number += 1
+                wordDictionaryList[number][key] = value
+            except ValueError:
+                pass
+        listOfWords.append(wordDictionaryList)
+        x.toml(listOfWords, path="highlights")
 
 
 def main(approach=0):
@@ -116,9 +142,7 @@ def main(approach=0):
     assert (approach != 0)
     if approach == 2:
         x = importing.System(False)
-        x.chineseFixer("highlights", False)
         ImproveEnglish(x)
-        x.chineseFixer("highlights", True)
         x.log("[System] Analysis complete")
     elif approach == 1:
         x = importing.System(["data", "learning", "highlights"])

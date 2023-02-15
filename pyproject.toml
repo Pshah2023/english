@@ -15,6 +15,11 @@ nltk = "^3.8.1"
 regex = "^2022.10.31"
 pytz = "^2022.7.1"
 openai = "^0.26.5"
+voluptuous = "^0.13.1"
+pydantic = "^1.10.4"
+toml = "^0.10.2"
+apscheduler = "^3.10.0"
+langdetect = "^1.0.9"
 
 
 [build-system]
