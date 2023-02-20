@@ -13,13 +13,14 @@ import pytz
 import itertools
 import openai
 import re
-from time import sleep
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 import shelve
 import json
 import filecmp
 import math
+import pyppeteer
+import asyncio
+from dateutil import parser
+
 
 class System:
     generalPath = ""
@@ -39,6 +40,7 @@ class System:
         self.file(toCreate)
         self.cleaning()
         self.createFiles()
+        print("[System] Initiated and passed testing")
 
     def get(self, remove=False):
         if remove == False:
@@ -80,10 +82,11 @@ class System:
         for path in self.fil.values():
             if os.path.exists(path) == False:
                 subprocess.call(["touch", path])
-        self.write(reading="New File")
-        self.toml(path="highlights")
+        self.write(path="docs")
+        self.toml(path="learning")
         self.clipboard()
         self.tasks()
+        # self.watch()
         self.log("Passed Testing")
         return self.fil
 
@@ -136,21 +139,15 @@ class System:
                 file.write(reading)
             return self.write()
 
-    def openFiles(self, highlights=False, learning=False, logs=False, tasks=False):
-        data = False
+    def openFiles(self, learning=False, logs=False, docs=False):
         if learning:
-            data = ["code", "-n", self.fil["learning"]]
-        if highlights:
-            data = ["code", "-n", self.fil["highlights"]]
+            self.commandline(["code", "-n", self.fil["learning"]])
         if logs:
             length = len(self.write(path="logs", listed=True))-1
-            data=["code", "-n", "-g", f"{self.fil['logs']}:{length}"]
-        if tasks:
-            length = len(self.write(path="tasks", listed=True))-1
-            data = ["code", "-n", "-g", f"{self.fil['tasks']}:{length}"]
-        if data:
-            self.commandline(data)
-
+            self.commandline(["code", "-n", "-g", f"{self.fil['logs']}:{length}"])
+        if docs:
+            self.commandline(["code", "-n", self.fil["docs"]])
+        
     def clipboard(self, reading=True):
         if reading == True:
             text = clipboard.paste()
@@ -177,7 +174,10 @@ class System:
                 pass
         allFiles = [item for sublist in allFiles for item in sublist]
         for newFile in self.fil.values():
-            allFiles.remove(newFile)
+            try:
+                allFiles.remove(newFile)
+            except:
+                pass
         for fileA, fileB in itertools.combinations(allFiles, 2):
             try:
                 content1 = self.write(path=fileA)
@@ -247,10 +247,10 @@ class System:
         processedOutput = dict()
         for task in processedTasks:
             processedOutput[task["title"]] = task["date"]
-        self.database(["tasks", processedOutput])
+        self.database("tasks", processedOutput)
         return processedOutput
 
-    def toml(self, reading=None, path="tasks"):
+    def toml(self, reading=None, path="learning"):
         """
         Features
         + Automatically parses nontomlizable data into tomlizable data and back
@@ -272,19 +272,18 @@ class System:
                         except ValueError:
                             returnAsList = False
                     if returnAsList == True:
-                        return list(item.values())
+                        return [listerizer(item) for item in list(item.values())]
                     else:
                         returnDict = dict()
                         for key, value in item.items():
                             returnDict[key] = listerizer(value)
                         return returnDict
-                else: 
+                else:
                     return item
             try:
                 with open(self.fil[path], "r", encoding="utf-8") as f:
                     data = toml.load(f)
                 parsed_toml = listerizer(data)
-                self.database(["tomlUnparsed", parsed_toml])
                 return parsed_toml
             except IOError:
                 self.log(f"[System] Failed to load {path} path, creating file anew.")
@@ -292,7 +291,7 @@ class System:
                 return self.toml(path=path)
             except toml.TomlDecodeError:
                 self.log("[System] " + self.write(path=path))
-                self.toml(reading="Nothing", path=path)
+                self.toml(reading="Failed with TomlDecodeError", path=path)
         if reading != None:
             def dicterizer(item):
                 if isinstance(item, list):
@@ -301,7 +300,8 @@ class System:
                         each = dicterizer(each)
                         if each != None:
                             toReturnDict[f"{num}"] = each
-                    return toReturnDict
+                    if len(toReturnDict.items()) != 0:
+                        return toReturnDict
                 elif isinstance(item, str):
                     stringList = re.split("\n", item)
                     if len(stringList) == 1:
@@ -316,11 +316,12 @@ class System:
                     toReturnDict = dict()
                     for key, value in item.items():
                         toReturnDict[key] = dicterizer(value)
-                    return toReturnDict
+                    if len(toReturnDict.items()) != 0:
+                        return toReturnDict
                 else: 
                     return item
+            self.database("toml", reading)
             reading = dicterizer(reading)
-            self.database(["tomlParsed", reading])
             with open(self.fil[path], "w", encoding="utf-8") as f:
                 toml.dump(reading, f)
             return self.toml(path=path)
@@ -331,11 +332,19 @@ class System:
         + Run AI
         + Presets - "creative", "precise"
         + Gives only output
-        + Saves output to database
+        + Saves output to database`
         Future Issues to Solve:
         - Slow
         - Alternative AIs not used
         """
+        openai.api_key = "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"
+        data = self.database("ai")
+        data = {item[0]: item[2] for item in data}
+        try:
+            data = data[prompt]
+            return data
+        except KeyError or SyntaxError:
+            pass
         sets = {"creative": [0.9, 0.8, 0.25, 0.95], "precise": [0, 1, 0, 0]}
         response = openai.Completion.create(
             model="text-davinci-003",
@@ -345,49 +354,40 @@ class System:
             top_p=sets[presets][1],
             frequency_penalty=sets[presets][2],
             presence_penalty=sets[presets][3])
-        self.database(["ai", prompt, sets[presets], response, response["choices"][0]["text"]])
+        self.database("ai", [prompt, presets, response["choices"][0]["text"]])
         return response["choices"][0]["text"]
     
-    def scheduler(self, function, date, preset):
-        """
-        Features
-        + Allows for running at a specific time
-        Issues
-        - Untested
-        """
-        scheduler = BackgroundScheduler()
-        scheduler.s.start()
-        scheduler.remove_all_jobs()
-        trigger = CronTrigger(
-            year=date.year, month=date.month, day=date.day, hour=date.hour, minute=date.minute, second=date.second
-        )
-        scheduler.add_job(
-            foo,
-            trigger=trigger,
-            args=preset,
-            name="Python Automation",
-        )
-        while True:
-            sleep(5)
-
-
-    def database(self, data=None):
+    def database(self, category, data=None):
         """
         Features
         + Persistent database
         + Works and is convenient
         Issues
         """
-        if data==None:  
-            busdata=shelve.open(self.generalPath + "/data.db")
-            toReturn = dict(busdata)
-            busdata.close()
-            return toReturn
-        if data!=None:
-            with shelve.open(self.generalPath + "/data.db") as db:
-                db[datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S-%f")] = data
-                db.close()
-            return self.database()
+        if data != {} and data != [] and data != "":
+            with shelve.open(self.generalPath + "/data.db", writeback=True) as db:
+                try:
+                    check = list(db[category])
+                except:
+                    db[category] = list()
+                    check = list()
+                    print(f"[System] [Database] Created category {category}")
+                if isinstance(check, list):
+                    if data not in check and data != None:
+                        if len(data) != 0:
+                            if isinstance(data, str) and data.strip() != "":
+                                check.append(data)
+                                db[category] = check
+                            else:
+                                check.append(data)
+                                db[category] = check
+                        else:
+                            print(f"[System] [Database] {category} Data is empty")
+                    else:
+                        print(f"[System] [Database] {category} Data already saved")
+        else:
+            print(f"[System] [Database] {category} Data is empty")
+        return check
 
     def commandline(self, data):
         """
@@ -397,7 +397,7 @@ class System:
         + Presets
         Issues
         """
-        presets = {"chrome", ["google-chrome"]}
+        presets = {"chrome": ["google-chrome"]}
         assert (isinstance(data, list))
         try:
             sets = data[0]
@@ -408,5 +408,157 @@ class System:
             pass
         output = subprocess.check_output(data)
         output = output.decode()
-        self.database(["command", data, output])
+        self.database("terminal", [data, output])
         return output
+
+    def chrome(self, data):
+        async def toRun():
+            # launch chromium browser in the background
+            browser = await pyppeteer.launch(headless=False, executablePath='/usr/bin/google-chrome')
+            
+            # open a new tab in the browser
+            page = await browser.newPage()
+            # add URL to a new page and then open it
+            await page.goto("https://www.medfield.net/o/medfield-high-school")
+            # create a screenshot of the page and save it
+            await page.screenshot({"path": "python.png"})
+            # close the browser
+            await browser.close()
+        asyncio.run(toRun())
+    
+    def watch(self, afkData=False, chromeData = False):
+        """
+        Features
+        + Works and is convenient
+        + Parses correctly
+        Issues
+        """
+        raw = subprocess.check_output(
+            ["wget", "-qO-", "http://localhost:5600/api/0/export"]).decode("utf-8")
+        raw = json.loads(raw)
+        # The structure of raw
+        # {'buckets':
+        #   {
+        #     'aw-watcher-window_pranit': ,
+        #     {
+        #       'id': 'aw-watcher-window_pranit',
+        #       'created': date of first data captured,
+        #       'name': None,
+        #       'type': 'currentwindow,
+        #       'client': 'aw-watcher-window',
+        #       'hostname': 'pranit',
+        #       'events': 
+        #       [ # First is latest
+        #         'timestamp': '%Y-%m-%dT%H:%M:%S.%f%z',
+        #         'duration': float, # in seconds
+        #         'data':
+        #         {
+        #           'app': string, # app name as string, e.g. 'Code'
+        #           'title': 'importing.py - english - Visual Studio Code'
+        #         }
+        #       ], # Last is oldest
+        #     }
+        #     'aw-watcher-afk_pranit': ,
+        #     {
+        #       'id': 'aw-watcher-afk_pranit',
+        #       'created': date of first data captured,
+        #       'name': None, 
+        #       'type': "afkstatus",
+        #       'client': 'aw-watcher-afk',
+        #       'hostname': 'pranit',
+        #       'events': 
+        #       [ # First is latest
+        #         'timestamp': '%Y-%m-%dT%H:%M:%S.%f%z',
+        #         'duration': float, # in seconds
+        #         'data':
+        #         {
+        #           'status': 'not-afk' # or 'afk'
+        #         }
+        #       ], # Last is oldest
+        #     }
+        #     'aw-watcher-web-chrome': 
+        #     {
+        #       'id': 'aw-watcher-web-chrome',
+        #       'created': date of first data captured,
+        #       'name': None,
+        #       'type': ''web.tab.current',
+        #       'client': 'aw-client-web',
+        #       'hostname': 'pranit',
+        #       'events': 
+        #       [ # First is latest
+        #         'timestamp': '%Y-%m-%dT%H:%M:%S.%f%z',
+        #         'duration': float, # in seconds
+        #         'data':
+        #         {
+        #           'url': 'https://docs.activitywatch.net/en/latest/buckets-and-events.html',
+        #           'title': 'Data model',
+        #           'audible': False,
+        #           'incognito': False,
+        #           'tabCount': 12
+        #         }
+        #       ], # Last is oldest
+        #     }
+        #   } 
+        # }
+        windowWatch = self.database("windowWatch")
+        date = datetime.datetime.now() - datetime.timedelta(minutes=1)
+        recollect = True
+        try:
+            if parser.parse(windowWatch[-1].decode().split("...")[0]) > date.replace(second=0, microsecond=0):
+                recollect = False
+        except IndexError:
+            pass
+        if recollect:
+            print("[System] [Activity Watch] Recollecting activity data")
+            for each in raw["buckets"]["aw-watcher-window_pranit"]["events"]:
+                date = parser.parse(each["timestamp"]).astimezone(pytz.timezone("US/Eastern"))
+                date = date.replace(microsecond=0, tzinfo=None)
+                duration = datetime.timedelta(seconds=each['duration'])
+                title = each['data']['title']
+                data = [str(date), str(duration), title]
+                data = "...".join(data).encode()
+                if str(duration) != "00:00:00" and data not in windowWatch:
+                    self.database("windowWatch", data)
+            if afkData:
+                afkData = self.database("afkWatch")
+                for each in raw["buckets"]["aw-watcher-afk_pranit"]["events"]:
+                    date = parser.parse(each["timestamp"]).astimezone(pytz.timezone("US/Eastern"))
+                    date = date.replace(microsecond=0, tzinfo=None)
+                    duration = datetime.timedelta(seconds=each['duration'])
+                    status = each['data']['status']
+                    if str(duration) != "00:00:00" and status != 'not-afk':
+                        data = [str(date), str(duration)]
+                        data = "...".join(data)
+                        if data not in afkData:
+                            self.database("afkWatch", data)
+            if chromeData:
+                chromeData = self.database("chromeWatch")
+                for each in raw["buckets"]["aw-watcher-web-chrome"]["events"]:
+                    date = parser.parse(each["timestamp"]).astimezone(pytz.timezone("US/Eastern"))
+                    date = date.replace(microsecond=0, tzinfo=None)
+                    duration = datetime.timedelta(seconds=each['duration'])
+                    title = each['data']['title']
+                    data = [str(date), str(duration), title]
+                    data = "...".join(data).encode()
+                    if str(duration) != "00:00:00" and data not in chromeData:
+                        self.database("chromeWatch", data)
+        else:
+            print("[System] [Activity Watch] Not recollecting data")
+        allData = [self.database("windowWatch"), self.database("afkWatch"), self.database("chromeWatch")]
+        windowData = []
+        for item in allData[0]:
+            item = item.decode().split("...")
+            item = [item[0], item[1], item[2]]
+            windowData.append(data)
+        afkData = []
+        for item in allData[1]:
+            item = item.decode().split("...")
+            item = [item[0], item[1]]
+            afkData.append(data)
+        chromeData = []
+        for item in allData[2]:
+            item = item.decode().split("...")
+            item = [item[0], item[1], item[2]]
+            chromeData.append(data)
+        allData = [windowData, afkData, chromeData]
+        return allData
