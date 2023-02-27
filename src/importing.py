@@ -13,7 +13,7 @@ import pytz
 import itertools
 import openai
 import re
-import shelve
+import shelvef
 import json
 import filecmp
 import math
@@ -337,7 +337,7 @@ class System:
         - Slow
         - Alternative AIs not used
         """
-        openai.api_key = "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"
+        openai.api_key = "my updated key won't be here."
         data = self.database("ai")
         data = {item[0]: item[2] for item in data}
         try:
